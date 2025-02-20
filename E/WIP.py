@@ -46,9 +46,6 @@ class MemoryEfficientFunction(torch.autograd.Function):
     
         return dX, dW, None, None, None
 
-
-
-
 if __name__ == "__main__":
     # Naive 2*4*4096*128000 / (1024)**3 Gb
     torch.manual_seed(0)
