@@ -27,25 +27,25 @@ class MemoryEfficientFunction(torch.autograd.Function):
         X, weight, labels = ctx.saved_tensors
         forward_function, chunk_size = ctx.forward_function, ctx.chunk_size
  
-
-        total_elements = labels.numel()
-        scale = 1 # dY / total_elements
-
         dX, dW = torch.zeros_like(X), torch.zeros_like(weight)
     
         start = 0
         for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0)):
             _X = _X.detach().requires_grad_()
             with torch.enable_grad():
-                _loss = forward_function((_wX := torch.nn.functional.linear(_X, weight).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) * scale
+                _loss = forward_function((_wX := torch.nn.functional.linear(_X, weight).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) / chunk_size
     
             _dX, _dW = torch.autograd.grad(_loss, (_X, weight), retain_graph=True)
 
             dX[start:(end := start + _X.shape[0])] = _dX
-            dW += _dW
+            dW += _dW     
             start = end
+            
+        dX *= dY
+        dW *= dY
     
         return dX, dW, None, None, None
+
 
 
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # Naive 2*4*4096*128000 / (1024)**3 Gb
     torch.manual_seed(0)
     
-    b, q_len, d_h, d_vocab = 4, 4096, 2**5, 2**15
+    b, q_len, d_h, d_vocab = 6, 4096, 2**5, 2**15
     X = torch.randn(b, d_h, requires_grad=True)
     labels = torch.randint(0, d_vocab, (b,))
     
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     """
     
     # Normal approach
-    linear = nn.Linear(d_h, d_vocab)
+    linear = nn.Linear(d_h, d_vocab, bias=False)
     normal_out = transformation_function(X, linear, labels)
     normal_out.backward()
     normal_grad_X = X.grad.clone()
@@ -76,12 +76,16 @@ if __name__ == "__main__":
 
     # Efficient
     cs = 2
+    # TODO: Implement this with a linear i.e. option of weight + bias. 
     eff_out = MemoryEfficientFunction.apply(X, linear.weight, labels, torch.nn.CrossEntropyLoss(reduction = "mean"), cs)
     eff_out.backward()
     eff_grad_X = X.grad.clone()
     eff_grad_W = linear.weight.grad.clone()
     
-    
+    print(eff_grad_X[0][0], normal_grad_X[0][0])
+    print(eff_grad_W[0][0], normal_grad_W[0][0])
+    torch.testing.assert_close(eff_grad_X, normal_grad_X)
+    torch.testing.assert_close(eff_grad_W, normal_grad_W)
     
     print('done')
     # with profile(activities=[ProfilerActivity.CPU], profile_memory=True, record_shapes=True) as prof:
