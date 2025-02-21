@@ -23,14 +23,15 @@ class MemoryEfficientReduction(torch.autograd.Function):
         
         # Retreive data stored in ctx.
         X, labels = ctx.saved_tensors; linear, reduce_function, reduction, chunk_size = ctx.inputs
-  
+        
+        # Recompute the forward pass to calculate the gradients
         dX = []
         for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0)):
             
             # Create a new detached subgraph for each input chunk.
             _X = _X.detach().requires_grad_()
             
-            # Recompute the forward chunked, enabling gradient computation this time.
+            # Enabling gradient computation this time.
             with torch.enable_grad():
                 _loss = reduce_function((_wX := linear(_X).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) 
                 
