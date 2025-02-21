@@ -1,7 +1,5 @@
 import torch
-from torch.utils import checkpoint
 import torch.nn as nn 
-from torch.profiler import profile, record_function, ProfilerActivity
 import warnings
 
 class MemoryEfficientReduction(torch.autograd.Function):
@@ -74,17 +72,3 @@ if __name__ == "__main__":
     
     torch.testing.assert_close(eff_grad_X, grad_X)
     torch.testing.assert_close(eff_grad_W, grad_W)
-    
-
-    # with profile(activities=[ProfilerActivity.CPU], profile_memory=True, record_shapes=True) as prof:
-    #    # Normal approach
-    #     linear = nn.Linear(d_h, d_vocab)
-    #     normal_out = transformation_function(X, linear, labels)
-    #     normal_out.backward()
-    #     normal_grad_X = X.grad.clone()
-    #     normal_grad_W = linear.weight.grad.clone()
-        
-        
-    # print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
-    # prof.export_chrome_trace("trace.json")
-        
