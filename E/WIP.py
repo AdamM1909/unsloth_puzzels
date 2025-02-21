@@ -2,89 +2,80 @@ import torch
 from torch.utils import checkpoint
 import torch.nn as nn 
 from torch.profiler import profile, record_function, ProfilerActivity
+import warnings
 
-
-def transformation_function(batch, linear, labels):
-        x = linear(batch).float() # Up projection to large space
-        from torch.nn import CrossEntropyLoss
-        down_projection_function = CrossEntropyLoss(reduction = "mean")
-        # Down projection to small space
-        loss = down_projection_function(x.view(-1, x.shape[-1]), labels.view(-1))
-        return loss
-
-class MemoryEfficientFunction(torch.autograd.Function):
+class MemoryEfficientReduction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, X, weight, labels, forward_function, chunk_size=2):
-        ctx.save_for_backward(X, weight, labels)
-        ctx.forward_function = forward_function
-        ctx.weight = weight
-        ctx.chunk_size = chunk_size
+    def forward(ctx, X, linear, labels, reduce_function, chunk_size):
+        
+        # Set the chunk_size = 1 if there is no reduction taking place to at least maintain perfomance.
+        if (reduction := getattr(reduce_function, "reduction")) == 'none':
+            chunk_size = 1; warnings.warn("reduction of reduction fucntion is None, no VRAM can be saved. Continuing with chunk_size=1.")
+        
+        # Save tensor and non-tensor inputs in ctx
+        ctx.save_for_backward(X, labels); ctx.inputs = [linear, reduce_function, reduction, chunk_size]
+        
+        # Chunk the forward pass, using linearity to reduce the chunk losess. Do not calculate/store gradients. 
         with torch.no_grad():
-            return torch.cat([forward_function((_wX := torch.nn.functional.linear(_X, weight).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0))]).mean()
+            return getattr(torch, reduction, torch.eye)(torch.cat([reduce_function((_wX := linear(_X).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0))]))
 
     @staticmethod
     def backward(ctx, dY):
-        X, weight, labels = ctx.saved_tensors
-        forward_function, chunk_size = ctx.forward_function, ctx.chunk_size
- 
-        dX, dW = torch.zeros_like(X), torch.zeros_like(weight)
-    
-        start = 0
+        
+        # Retreive data stored in ctx.
+        X, labels = ctx.saved_tensors; linear, reduce_function, reduction, chunk_size = ctx.inputs
+  
+        dX = []
         for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0)):
-            _X = _X.detach().requires_grad_()
-            with torch.enable_grad():
-                _loss = forward_function((_wX := torch.nn.functional.linear(_X, weight).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) / chunk_size
-    
-            _dX, _dW = torch.autograd.grad(_loss, (_X, weight), retain_graph=True)
-
-            dX[start:(end := start + _X.shape[0])] = _dX
-            dW += _dW     
-            start = end
             
-        dX *= dY
-        dW *= dY
-    
-        return dX, dW, None, None, None
+            # Create a new detached subgraph for each input chunk.
+            _X = _X.detach().requires_grad_()
+            
+            # Recompute the forward chunked, enabling gradient computation this time.
+            with torch.enable_grad():
+                _loss = reduce_function((_wX := linear(_X).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) 
+                
+                # Weight the loss by 1 / chunk_size if this is a "mean" reduction. 
+                if reduction == "mean":
+                    _loss /= chunk_size
+            
+            # Accumulate gradients in the linear + save the input chunk gradients.
+            _loss.backward(); dX.append(_X.grad)
+ 
+        return torch.cat(dX, axis=0)*dY, None, None, None, None
+        
 
 if __name__ == "__main__":
-    # Naive 2*4*4096*128000 / (1024)**3 Gb
+
+    def standard_reduction(batch, linear, labels, reduce_function):
+        # Up projection to large space and reduce.
+        return  reduce_function((x := linear(batch).float()).view(-1, x.shape[-1]), labels.view(-1))
+    
+    # Test data.
     torch.manual_seed(0)
-    
-    b, q_len, d_h, d_vocab = 6, 4096, 2**5, 2**15
-    X = torch.randn(b, d_h, requires_grad=True)
-    labels = torch.randint(0, d_vocab, (b,))
-    
-    """
-    Plan
-    1) Chunk the forward of the up project i.e. linear over the batch dimension
-    2) Save the input and recompute the same chunks for the backward.
-    """
-    
-    # Normal approach
-    linear = nn.Linear(d_h, d_vocab, bias=False)
-    normal_out = transformation_function(X, linear, labels)
-    normal_out.backward()
-    normal_grad_X = X.grad.clone()
-    normal_grad_W = linear.weight.grad.clone()
+    b, q_len, d_h, d_vocab = 128, 4096, 2**5, 2**15
+    X, labels, linear = torch.randn(b, d_h, requires_grad=True), torch.randint(0, d_vocab, (b,)), nn.Linear(d_h, d_vocab)
+    reduce_function = torch.nn.CrossEntropyLoss(reduction = "mean")
 
+    
+    # Standard approach.
+    out = standard_reduction(X, linear, labels, reduce_function)
+    out.backward()
+    grad_X, grad_W = X.grad.clone(), linear.weight.grad.clone()
+   
+    linear.zero_grad(); X.grad = None
 
-    linear.zero_grad()
-    X.grad = None
-
-    # Efficient
-    cs = 2
-    # TODO: Implement this with a linear i.e. option of weight + bias. 
-    eff_out = MemoryEfficientFunction.apply(X, linear.weight, labels, torch.nn.CrossEntropyLoss(reduction = "mean"), cs)
+    # Efficient approach.
+    chunk_size = 4
+    eff_out = MemoryEfficientReduction.apply(X, linear, labels, torch.nn.CrossEntropyLoss(reduction = "mean"), chunk_size)
     eff_out.backward()
-    eff_grad_X = X.grad.clone()
-    eff_grad_W = linear.weight.grad.clone()
+    eff_grad_X, eff_grad_W = X.grad.clone(), linear.weight.grad.clone()
+   
     
-    print(eff_grad_X[0][0], normal_grad_X[0][0])
-    print(eff_grad_W[0][0], normal_grad_W[0][0])
-    torch.testing.assert_close(eff_grad_X, normal_grad_X)
-    torch.testing.assert_close(eff_grad_W, normal_grad_W)
+    torch.testing.assert_close(eff_grad_X, grad_X)
+    torch.testing.assert_close(eff_grad_W, grad_W)
     
-    print('done')
+
     # with profile(activities=[ProfilerActivity.CPU], profile_memory=True, record_shapes=True) as prof:
     #    # Normal approach
     #     linear = nn.Linear(d_h, d_vocab)
