@@ -1,6 +1,5 @@
-import torch
+import torch, warnings
 import torch.nn as nn 
-import warnings
 
 class MemoryEfficientReduction(torch.autograd.Function):
     
@@ -75,5 +74,4 @@ if __name__ == "__main__":
     eff_grad_X, eff_grad_W = X.grad.clone(), linear.weight.grad.clone()
    
     
-    torch.testing.assert_close(eff_grad_X, grad_X)
-    torch.testing.assert_close(eff_grad_W, grad_W)
+    torch.testing.assert_close(eff_grad_X, grad_X); torch.testing.assert_close(eff_grad_W, grad_W)
