@@ -9,7 +9,7 @@ class MemoryEfficientReduction(torch.autograd.Function):
         
         # Set the chunk_size = 1 if there is no reduction taking place to at least maintain perfomance.
         if (reduction := getattr(reduce_function, "reduction")) == "none":
-            chunk_size = 1; warnings.warn("reduction of reduction fucntion is None, no VRAM can be saved. Continuing with chunk_size=1.")
+            chunk_size = 1; warnings.warn("Reduction in reduction function is 'none' so no VRAM can be saved. Continuing with chunk_size=1.")
         
         # Save tensor and non-tensor inputs in ctx.
         ctx.save_for_backward(X, labels); ctx.inputs = [linear, reduce_function, reduction, chunk_size]
