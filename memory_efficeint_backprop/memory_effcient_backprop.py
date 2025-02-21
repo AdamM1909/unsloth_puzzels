@@ -41,8 +41,11 @@ class MemoryEfficientReduction(torch.autograd.Function):
             
             # Accumulate gradients in the linear + save the input chunk gradients.
             _loss.backward(); dX.append(_X.grad)
+        
+        # Apply upstream gradients to the input gradients.    
+        dX = torch.cat(dX, axis=0)*dY
  
-        return torch.cat(dX, axis=0)*dY, None, None, None, None
+        return dX, None, None, None, None
         
 
 if __name__ == "__main__":
