@@ -11,7 +11,7 @@ class MemoryEfficientReduction(torch.autograd.Function):
         if (reduction := getattr(reduce_function, "reduction")) == "none":
             chunk_size = 1; warnings.warn("reduction of reduction fucntion is None, no VRAM can be saved. Continuing with chunk_size=1.")
         
-        # Save tensor and non-tensor inputs in ctx
+        # Save tensor and non-tensor inputs in ctx.
         ctx.save_for_backward(X, labels); ctx.inputs = [linear, reduce_function, reduction, chunk_size]
         
         # Chunk the forward pass, using linearity to reduce the chunk losess. Do not calculate/store gradients. 
@@ -24,7 +24,7 @@ class MemoryEfficientReduction(torch.autograd.Function):
         # Retreive data stored in ctx.
         X, labels = ctx.saved_tensors; linear, reduce_function, reduction, chunk_size = ctx.inputs
         
-        # Recompute the forward pass to calculate the gradients
+        # Recompute the forward pass to calculate the gradients.
         dX = []
         for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0)):
             
