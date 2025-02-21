@@ -3,6 +3,7 @@ import torch.nn as nn
 import warnings
 
 class MemoryEfficientReduction(torch.autograd.Function):
+    
     @staticmethod
     def forward(ctx, X, linear, labels, reduce_function, chunk_size):
         
@@ -16,7 +17,7 @@ class MemoryEfficientReduction(torch.autograd.Function):
         # Chunk the forward pass, using linearity to reduce the chunk losess. Do not calculate/store gradients. 
         with torch.no_grad():
             return getattr(torch, reduction, torch.eye)(torch.cat([reduce_function((_wX := linear(_X).float()).view(-1, _wX.shape[-1]), _labels.view(-1)).view(-1) for _X, _labels in zip(torch.chunk(X, chunk_size, dim=0), torch.chunk(labels, chunk_size, dim=0))]))
-
+    
     @staticmethod
     def backward(ctx, dY):
         
