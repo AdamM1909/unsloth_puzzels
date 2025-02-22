@@ -6,6 +6,9 @@ class MemoryEfficientReduction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, X, linear, labels, reduce_function, chunk_size):
         
+        # Require each batch to be of the same size for later gradient accumulation. 
+        assert X.shape[0] % chunk_size == 0, "chunk_size must be a multiple of the batch size."  
+              
         # Set the chunk_size = 1 if there is no reduction taking place to at least maintain perfomance.
         if (reduction := getattr(reduce_function, "reduction")) == "none":
             chunk_size = 1; warnings.warn("Reduction in reduction function is 'none' so no VRAM can be saved. Continuing with chunk_size=1.")
@@ -55,8 +58,8 @@ if __name__ == "__main__":
     
     # Test data.
     torch.manual_seed(0)
-    b, q_len, d_h, d_vocab = 128, 4096, 2**5, 2**15
-    X, labels, linear = torch.randn(b, d_h, requires_grad=True), torch.randint(0, d_vocab, (b,)), nn.Linear(d_h, d_vocab)
+    b, q_len, d_h, d_vocab = 10, 3, 2, 2
+    X, labels, linear = torch.randn((b, q_len, d_h), requires_grad=True), torch.randint(0, d_vocab, (b, q_len)), nn.Linear(d_h, d_vocab)
     reduce_function = torch.nn.CrossEntropyLoss(reduction = "mean")
 
     
@@ -68,10 +71,10 @@ if __name__ == "__main__":
     linear.zero_grad(); X.grad = None
 
     # Efficient approach.
-    chunk_size = 4
+    chunk_size = 2
     eff_out = MemoryEfficientReduction.apply(X, linear, labels, torch.nn.CrossEntropyLoss(reduction = "mean"), chunk_size)
     eff_out.backward()
     eff_grad_X, eff_grad_W = X.grad.clone(), linear.weight.grad.clone()
    
-    
+    # Test
     torch.testing.assert_close(eff_grad_X, grad_X); torch.testing.assert_close(eff_grad_W, grad_W)
