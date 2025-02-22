@@ -18,8 +18,7 @@ class MemoryEfficientReduction(torch.autograd.Function):
         ctx.save_for_backward(X, labels); ctx.inputs = [linear, reduce_function, reduction, chunk_size]
         
         # Merge the batch and query length dimension to allow increase batching.
-        X = X.view(-1, X.shape[-1])
-        labels = labels.view(-1)
+        X, labels= X.view(-1, X.shape[-1]), labels.view(-1)
         
         # Require each batch to be of the same size for later gradient accumulation. 
         assert X.shape[0] % chunk_size == 0, "chunk_size must be a multiple of the batch size or query length."  
