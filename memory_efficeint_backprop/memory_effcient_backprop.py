@@ -68,26 +68,28 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     X = torch.randn(b, q_len, d_h, requires_grad=True, device=device)
-    labels = torch.randint(0, d_vocab, (b, q_len), device=device)
     linear = nn.Linear(d_h, d_vocab, device=device)
+    
+    for reduce_function, labels in [
+        (torch.nn.CrossEntropyLoss(reduction="mean"), torch.randint(0, d_vocab, (b, q_len), device=device)),
+        ]:
 
-    reduce_function = torch.nn.CrossEntropyLoss(reduction="mean")
-
-    # Standard approach.
-    linear.zero_grad(); X.grad = None
-    out = standard_reduction(X, linear, labels, reduce_function)
-    out.backward()
-    grad_X, grad_W = X.grad.clone(), linear.weight.grad.clone()
+        # Standard approach.
+        linear.zero_grad(); X.grad = None
+        out = standard_reduction(X, linear, labels, reduce_function)
+        out.backward()
+        grad_X, grad_W = X.grad.clone(), linear.weight.grad.clone()
 
 
-    # Efficient approach.
-    linear.zero_grad(); X.grad = None
-    eff_out = MemoryEfficientReduction.apply(X, linear, labels, reduce_function, chunk_size)
-    eff_out.backward()
-    eff_grad_X, eff_grad_W = X.grad.clone(), linear.weight.grad.clone()
+        # Efficient approach.
+        linear.zero_grad(); X.grad = None
+        eff_out = MemoryEfficientReduction.apply(X, linear, labels, reduce_function, chunk_size)
+        eff_out.backward()
+        eff_grad_X, eff_grad_W = X.grad.clone(), linear.weight.grad.clone()
 
-    # Test
-    torch.testing.assert_close(out, eff_out)
-    torch.testing.assert_close(eff_grad_X, grad_X)
-    torch.testing.assert_close(eff_grad_W, grad_W)
-    print('Passed')
+        # Test
+        torch.testing.assert_close(out, eff_out)
+        torch.testing.assert_close(eff_grad_X, grad_X)
+        torch.testing.assert_close(eff_grad_W, grad_W)
+        
+        print(f'Passed: {reduce_function}')
