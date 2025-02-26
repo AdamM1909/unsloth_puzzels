@@ -31,17 +31,28 @@ torch._dynamo.config.suppress_errors = False
 
 if __name__ == "__main__":
     
-    # @torch.compile(fullgraph=False)
-    # def function_with_graph_break(x):
-    #     y = x + 1
-    #     print("Graph break")  
-    #     z = y * 2  
-    #     return z
+    @torch.compile(fullgraph=False)
+    def function_with_graph_break(x):
+        y = x + 1
+        print("Graph break")  
+        z = y * 2  
+        return z
 
-    # result = function_with_graph_break(torch.randn(3, 3))
+    result = function_with_graph_break(torch.randn(3, 3))
     
     @torch.compile
     def fn(x):
         return x + 1
 
     fn(torch.ones(3, 3))
+    
+    import torch._dynamo as dynamo
+    def toy_example(a, b):
+        x = a / (torch.abs(a) + 1)
+        print("woo")
+        if b.sum() < 0:
+            b = b * -1
+        return x * b
+    explanation = dynamo.explain(toy_example)(torch.randn(10), torch.randn(10))
+    
+    print(explanation)
