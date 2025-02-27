@@ -39,9 +39,6 @@ def compiled_llama_mlp(self, x):
 import transformers.models.llama.modeling_llama
 transformers.models.llama.modeling_llama.LlamaMLP.forward = compiled_llama_mlp
 
-
-
-
 if __name__ == "__main__":
     
     max_seq_length = 128

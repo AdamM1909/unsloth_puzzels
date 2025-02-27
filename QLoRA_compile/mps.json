@@ -1,0 +1,114 @@
+
+{
+  "schemaVersion": 1,
+  "deviceProperties": [
+  ],
+  "traceEvents": [
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::rand", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558088.160, "dur": 74.998,
+    "args": {
+      "External id": 1,"Record function id": 0, "Ev Idx": 0
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::empty", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558089.452, "dur": 2.960,
+    "args": {
+      "External id": 2,"Record function id": 0, "Ev Idx": 1
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::uniform_", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558095.038, "dur": 67.744,
+    "args": {
+      "External id": 3,"Record function id": 0, "Ev Idx": 2
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::rand", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558166.368, "dur": 32.726,
+    "args": {
+      "External id": 4,"Record function id": 0, "Ev Idx": 3
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::empty", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558166.743, "dur": 0.876,
+    "args": {
+      "External id": 5,"Record function id": 0, "Ev Idx": 4
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::uniform_", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558167.827, "dur": 30.975,
+    "args": {
+      "External id": 6,"Record function id": 0, "Ev Idx": 5
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::matmul", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558205.847, "dur": 34.602,
+    "args": {
+      "External id": 7,"Record function id": 0, "Sequence number": 0, "Fwd thread id": 0, "Ev Idx": 6
+    }
+  },
+  {
+    "ph": "X", "cat": "cpu_op", "name": "aten::mm", "pid": 89149, "tid": 2991074,
+    "ts": 4699955558206.556, "dur": 33.560,
+    "args": {
+      "External id": 8,"Record function id": 0, "Sequence number": 0, "Fwd thread id": 0, "Ev Idx": 7
+    }
+  },
+  {
+    "name": "thread_name", "ph": "M", "ts": 4699955558024.000, "pid": 89149, "tid": 2991074,
+    "args": {
+      "name": "thread 2991074 ()"
+    }
+  },
+  {
+    "name": "thread_sort_index", "ph": "M", "ts": 4699955558024.000, "pid": 89149, "tid": 2991074,
+    "args": {
+      "sort_index": 2991074
+    }
+  },
+  {
+    "name": "thread_name", "ph": "M", "ts": 4699955558024.000, "pid": 89149, "tid": 2991074,
+    "args": {
+      "name": "thread 2991074 ()"
+    }
+  },
+  {
+    "name": "thread_sort_index", "ph": "M", "ts": 4699955558024.000, "pid": 89149, "tid": 2991074,
+    "args": {
+      "sort_index": 2991074
+    }
+  },
+  {
+    "ph": "X", "cat": "Trace", "ts": 4699955557764.000, "dur": 486.000,
+    "pid": "Spans", "tid": "PyTorch Profiler",
+    "name": "PyTorch Profiler (0)",
+    "args": {
+      "Op count": 0
+    }
+  },
+  {
+    "name": "process_sort_index", "ph": "M", "ts": 4699955557764.000,
+    "pid": "Spans", "tid": 0,
+    "args": {
+      "sort_index": 536870912
+    }
+  },
+  {
+    "name": "Iteration Start: PyTorch Profiler", "ph": "i", "s": "g",
+    "pid": "Traces", "tid": "Trace PyTorch Profiler", "ts": 4699955557764.000
+  },
+  {
+    "name": "Record Window End", "ph": "i", "s": "g",
+    "pid": "", "tid": "", "ts": 4699955558343.000
+  }
+  ],
+  "traceName": "mps.json",
+  "displayTimeUnit": "ms",
+  "baseTimeNanoseconds": 1735632360000000000
+}
