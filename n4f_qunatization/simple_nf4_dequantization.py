@@ -9,7 +9,7 @@ torch_compile_options = {
     "debug"             : False
 }
 disable = False
-DEBUG = 1
+DEBUG = 0
 
 # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
 NF4_GRID = torch.tensor([
@@ -48,8 +48,7 @@ def quantize_nf4(x_fp32):
 
     # View in pairs ready to pack 2 uint4 into uint8.
     idx = idx.view(-1, 2)
-    print(idx)
-    
+  
     # First value of pair goes in the lower 4 bits, second value in the upper 4 bits by shifting << 4 (*16).
     # combining with bitwise OR. 
     x_nf4 = (idx[:, 0] | (idx[:, 1] << 4)).to(torch.uint8)
@@ -99,3 +98,5 @@ if __name__ == "__main__":
     print(c)
     print(X_nf4[:5])
     print(X_dequant[:5, :5])
+    
+    # TODO: blockwize dequnatization, signature to match fast_dequantize
