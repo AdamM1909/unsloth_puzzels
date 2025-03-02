@@ -17,7 +17,7 @@ def quantize_tensor_int8(x_fp32):
     return x_int8, c
 
 @torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options)
-def dequantize_tensor__int8(x_int8, c):
+def dequantize_tensor_int8(x_int8, c):
     x_fp32 = x_int8.to(torch.float32) / c
     return x_fp32
 
