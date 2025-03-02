@@ -8,7 +8,8 @@ torch_compile_options = {
     "triton.cudagraphs" : False,
     "debug"             : False
 }
-disable = True
+disable = False
+DEBUG = 1
 
 # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
 NF4_GRID = torch.tensor([
@@ -33,26 +34,50 @@ NF4_GRID = torch.tensor([
 
 @torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
 def quantize_nf4(x_fp32):
-
+    
     # Scale tensor to [-1, 1] range
     x_fp32_scaled = x_fp32 / (absmax := torch.max(torch.abs(x_fp32)))
+    if DEBUG: print(f"{x_fp32_scaled=}")
     
-    # Find closest NF4 grid point to repesent each value in the qunatized tensor
-    d = torch.abs((x_fp32_scaled.unsqueeze(-1) - NF4_GRID.view(1, 1, -1)))
-    x_nf4 = torch.argmin(d, dim=-1)
+    # Find closest NF4 grid point index to repesent each value in the nf4 tensor, flatten.
+    idx = torch.argmin(torch.abs((x_fp32_scaled.view(-1).unsqueeze(-1) - NF4_GRID)), dim=-1)
+  
+    # Pad with zeros if odd.
+    if idx.numel() % 2 != 0:
+        idx = torch.cat([idx.view(-1), torch.zeros(1, dtype=idx.dtype, device=idx.device)])
+
+    # View in pairs ready to pack 2 uint4 into uint8.
+    idx = idx.view(-1, 2)
+    print(idx)
     
-    # Store indices as uint8 (note: in production, you'd pack two 4-bit values per byte)
-    x_nf4 = x_nf4 #.to(torch.uint8)
-    
+    # First value of pair goes in the lower 4 bits, second value in the upper 4 bits by shifting << 4 (*16).
+    # combining with bitwise OR. 
+    x_nf4 = (idx[:, 0] | (idx[:, 1] << 4)).to(torch.uint8)
+
     return x_nf4, absmax
 
 @torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
-def dequantize_nf4(x_nf4, absmax):
-    # Convert indices back to grid values
-    x_dequant = NF4_GRID[x_nf4]
+def dequantize_nf4(x_nf4, absmax, x_shape):
     
-    # Scale back to original range
-    x_fp32 = x_dequant * absmax
+    # Make an empty tensor to unpack idxs of NF4_GRID back into. 
+    idx = torch.empty(x_nf4.numel() * 2, dtype=torch.int64, device=x_nf4.device).view(-1, 2)
+    
+    # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
+    idx[:, 0], idx[:, 1] = x_nf4 & 0x0F, (x_nf4 >> 4) & 0x0F
+    
+    # If we had to add padding remove it now.
+    if idx.numel() != torch.prod(torch.tensor(x_shape)):
+        idx = idx.view(-1)[:-1]
+    
+    # Get back to original tensor shape.
+    idx = idx.view(*x_shape)
+    
+    # Convert indices back to grid values
+    x_fp32 = NF4_GRID[idx]
+    if DEBUG: print(f"{x_fp32=}")
+    
+    # Scale back to original scale
+    x_fp32 = x_fp32 * absmax
     
     return x_fp32
 
@@ -60,17 +85,17 @@ if __name__ == "__main__":
     # https://huggingface.co/docs/bitsandbytes/en/reference/nn/linear4bit
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
     torch.random.manual_seed(0)
-    N = 128
+    N = 127
     X = torch.randn(N, N, dtype=torch.float32)
     
     # Quantize to NF4
     X_nf4, c = quantize_nf4(X)
     
     # Dequantize back to FP32
-    X_dequant = dequantize_nf4(X_nf4, c)
+    X_dequant = dequantize_nf4(X_nf4, c, X.shape)
     
     # Print results
     print(X[:5, :5])
     print(c)
-    print(X_nf4[:5, :5])
+    print(X_nf4[:5])
     print(X_dequant[:5, :5])
