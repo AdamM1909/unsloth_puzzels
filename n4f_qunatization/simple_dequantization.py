@@ -9,7 +9,7 @@ torch_compile_options = {
 }
 
 @torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options)
-def quantize_tensor(x_fp32):
+def quantize_tensor_int8(x_fp32):
     # Scale to [-1, 1] -> map to int 8 range on [-127, 127] -> round -> cast
     absmax = torch.max(torch.abs(x_fp32))
     c = 127.0 / absmax
@@ -17,7 +17,7 @@ def quantize_tensor(x_fp32):
     return x_int8, c
 
 @torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options)
-def dequantize_tensor(x_int8, c):
+def dequantize_tensor__int8(x_int8, c):
     x_fp32 = x_int8.to(torch.float32) / c
     return x_fp32
 
@@ -26,8 +26,8 @@ if __name__ == "__main__":
     N = 128
     X = torch.randn(N, N, dtype=torch.float32)
 
-    X_qauntized, c = quantize_tensor(X)
-    X_deqauntized = dequantize_tensor(X_qauntized, c)
+    X_qauntized, c = quantize_tensor_int8(X)
+    X_deqauntized = dequantize_tensor_int8(X_qauntized, c)
     
     print(X)
     print(c)
