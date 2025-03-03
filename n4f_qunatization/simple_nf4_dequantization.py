@@ -10,8 +10,6 @@ torch_compile_options = {
 }
 disable = False
 DEBUG = 0
-
-# https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
 NF4_GRID = torch.tensor([
             -1.0,
             -0.6961928009986877,
@@ -81,6 +79,7 @@ def dequantize_nf4(x_nf4, absmax, x_shape):
     return x_fp32
 
 if __name__ == "__main__":
+    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
     # https://huggingface.co/docs/bitsandbytes/en/reference/nn/linear4bit
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
     torch.random.manual_seed(0)
