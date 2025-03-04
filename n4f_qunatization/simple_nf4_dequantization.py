@@ -30,7 +30,7 @@ NF4_GRID = torch.tensor([
         ]
 )
 
-@torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
+@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def quantize_nf4(x_fp32):
     
     # Scale tensor to [-1, 1] range
@@ -40,9 +40,15 @@ def quantize_nf4(x_fp32):
     # Find closest NF4 grid point index to repesent each value in the nf4 tensor, flatten.
     idx = torch.argmin(torch.abs((x_fp32_scaled.view(-1).unsqueeze(-1) - NF4_GRID)), dim=-1)
   
-    # Pad with zeros if odd.
-    if idx.numel() % 2 != 0:
-        idx = torch.cat([idx.view(-1), torch.zeros(1, dtype=idx.dtype, device=idx.device)])
+    # # Pad with zeros if odd.
+    # if idx.numel() % 2 != 0:
+    #     idx = torch.cat([idx.view(-1), torch.zeros(1, dtype=idx.dtype, device=idx.device)])
+        
+    # Calculate padding size (0 if even, 1 if odd)
+    pad_size = (idx.numel() % 2) * 1
+    
+    # Always pad (adds 0 elements if already even)
+    idx = torch.cat([idx, torch.zeros(pad_size, dtype=idx.dtype, device=idx.device)])
 
     # View in pairs ready to pack 2 uint4 into uint8.
     idx = idx.view(-1, 2)
@@ -53,7 +59,7 @@ def quantize_nf4(x_fp32):
 
     return x_nf4, absmax
 
-@torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
+@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4(x_nf4, absmax, x_shape):
     
     # Make an empty tensor to unpack idxs of NF4_GRID back into. 
@@ -66,12 +72,14 @@ def dequantize_nf4(x_nf4, absmax, x_shape):
     if idx.numel() != torch.prod(torch.tensor(x_shape)):
         idx = idx.view(-1)[:-1]
     
+    # idx = idx.view(-1)[:torch.prod(torch.tensor(x_shape))]
+    
     # Get back to original tensor shape.
     idx = idx.view(*x_shape)
     
     # Convert indices back to grid values
     x_fp32 = NF4_GRID[idx]
-    if DEBUG: print(f"{x_fp32=}")
+    # if DEBUG: print(f"{x_fp32=}")
     
     # Scale back to original scale
     x_fp32 = x_fp32 * absmax
