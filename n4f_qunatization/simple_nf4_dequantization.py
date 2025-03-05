@@ -9,7 +9,6 @@ torch_compile_options = {
     "debug"             : False
 }
 disable = True
-DEBUG = 0
 NF4_GRID = torch.tensor([
             -1.0,
             -0.6961928009986877,
@@ -35,7 +34,6 @@ def quantize_nf4(x_fp32):
     
     # Scale tensor to [-1, 1] range
     x_fp32_scaled = x_fp32 / (absmax := torch.max(torch.abs(x_fp32)))
-    if DEBUG: print(f"{x_fp32_scaled=}")
     
     # Find closest NF4 grid point index to repesent each value in the nf4 tensor, flatten.
     idx = torch.argmin(torch.abs((x_fp32_scaled.view(-1).unsqueeze(-1) - NF4_GRID)), dim=-1)
