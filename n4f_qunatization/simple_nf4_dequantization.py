@@ -8,7 +8,7 @@ torch_compile_options = {
     "triton.cudagraphs" : False,
     "debug"             : False
 }
-disable = False
+disable = True
 DEBUG = 0
 NF4_GRID = torch.tensor([
             -1.0,
@@ -40,15 +40,8 @@ def quantize_nf4(x_fp32):
     # Find closest NF4 grid point index to repesent each value in the nf4 tensor, flatten.
     idx = torch.argmin(torch.abs((x_fp32_scaled.view(-1).unsqueeze(-1) - NF4_GRID)), dim=-1)
   
-    # # Pad with zeros if odd.
-    # if idx.numel() % 2 != 0:
-    #     idx = torch.cat([idx.view(-1), torch.zeros(1, dtype=idx.dtype, device=idx.device)])
-        
-    # Calculate padding size (0 if even, 1 if odd)
-    pad_size = (idx.numel() % 2) * 1
-    
-    # Always pad (adds 0 elements if already even)
-    idx = torch.cat([idx, torch.zeros(pad_size, dtype=idx.dtype, device=idx.device)])
+    # Zero pad to an even number of elements.
+    idx = torch.cat([idx, torch.zeros((idx.numel() % 2), dtype=idx.dtype, device=idx.device)])
 
     # View in pairs ready to pack 2 uint4 into uint8.
     idx = idx.view(-1, 2)
@@ -68,19 +61,12 @@ def dequantize_nf4(x_nf4, absmax, x_shape):
     # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
     idx[:, 0], idx[:, 1] = x_nf4 & 0x0F, (x_nf4 >> 4) & 0x0F
     
-    # If we had to add padding remove it now.
-    if idx.numel() != torch.prod(torch.tensor(x_shape)):
-        idx = idx.view(-1)[:-1]
-    
-    # idx = idx.view(-1)[:torch.prod(torch.tensor(x_shape))]
-    
-    # Get back to original tensor shape.
-    idx = idx.view(*x_shape)
+    # If we had to add padding remove it now and get back to original tensor shape.
+    idx = idx.view(-1)[:idx.numel() - (x_shape.numel() % 2)].view(*x_shape)
     
     # Convert indices back to grid values
     x_fp32 = NF4_GRID[idx]
-    # if DEBUG: print(f"{x_fp32=}")
-    
+
     # Scale back to original scale
     x_fp32 = x_fp32 * absmax
     
