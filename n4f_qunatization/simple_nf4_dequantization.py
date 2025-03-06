@@ -50,7 +50,7 @@ def quantize_nf4(x_fp32):
 
     return x_nf4, absmax
 
-@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
+# @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4(x_nf4, absmax, x_shape):
     
     # Make an empty tensor to unpack idxs of NF4_GRID back into. 
@@ -74,21 +74,44 @@ if __name__ == "__main__":
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
     # https://huggingface.co/docs/bitsandbytes/en/reference/nn/linear4bit
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
+    # TODO: blockwize dequnatization, signature to match fast_dequantize
+    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/86b6c37a8ad448230cedb60753f63150b603a112/bitsandbytes/functional.py#L958
+    
+    
     torch.random.manual_seed(0)
-    N = 127
+    N = 1024
     X = torch.randn(N, N, dtype=torch.float32)
     
     # Quantize to NF4
     X_nf4, c = quantize_nf4(X)
     
-    # Dequantize back to FP32
-    X_dequant = dequantize_nf4(X_nf4, c, X.shape)
+    import time 
+    def bench(f, name=None, iters=100, warmup=5, profile=False):
+        for _ in range(warmup): 
+            f()
+        if profile:
+            with torch.profiler.profile() as prof:
+                f()
+            prof.export_chrome_trace(f"{name if name is not None else 'trace'}.json")
+
+   
+        begin = time.time()
+        for _ in range(iters):
+            f()
+
+        res = f"{f'{name}:' if name else ''} {(time.time()-begin)*1e6/iters: .2f}us"
+        print(res)
+        
+    compiled_dequant = torch.compile(dequantize_nf4, fullgraph=True, dynamic=True, options=torch_compile_options)
+    bench(lambda: compiled_dequant(X_nf4, c, X.shape), name='compiled')
+    bench(lambda: dequantize_nf4(X_nf4, c, X.shape), name='normal')
     
-    # Print results
-    print(X)
-    print(c)
-    print(X_nf4)
-    print(X_dequant)
     
-    # TODO: blockwize dequnatization, signature to match fast_dequantize
-    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/86b6c37a8ad448230cedb60753f63150b603a112/bitsandbytes/functional.py#L958
+     # # Dequantize back to FP32
+    # X_dequant = dequantize_nf4(X_nf4, c, X.shape)
+    
+    # # Print results
+    # print(X)
+    # print(c)
+    # print(X_nf4)
+    # print(X_dequant)
