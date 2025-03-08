@@ -82,7 +82,7 @@ if __name__ == "__main__":
     # TODO: blockwize dequnatization, signature to match fast_dequantize
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/86b6c37a8ad448230cedb60753f63150b603a112/bitsandbytes/functional.py#L958
     
-    
+    # Here are the kernels in C: https://github.com/bitsandbytes-foundation/bitsandbytes/tree/main/csrc
     torch.random.manual_seed(0)
     N = 3
     X = torch.randn(N, N, dtype=torch.float32)
