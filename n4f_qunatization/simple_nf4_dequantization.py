@@ -50,7 +50,7 @@ def quantize_nf4(x_fp32):
 
     return x_nf4, absmax
 
-# @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
+@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4(x_nf4, absmax, x_shape):
     
     # Make an empty tensor to unpack idxs of NF4_GRID back into. 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     
     
     torch.random.manual_seed(0)
-    N = 1024
+    N = 4096
     X = torch.randn(N, N, dtype=torch.float32)
     
     # Quantize to NF4
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     bench(lambda: dequantize_nf4(X_nf4, c, X.shape), name='normal')
     
     
-     # # Dequantize back to FP32
+    # # Dequantize back to FP32
     # X_dequant = dequantize_nf4(X_nf4, c, X.shape)
     
     # # Print results
