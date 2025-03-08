@@ -32,8 +32,11 @@ NF4_GRID = torch.tensor([
 @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def quantize_nf4(x_fp32):
     
-    # Scale tensor to [-1, 1] range
-    x_fp32_scaled = x_fp32 / (absmax := torch.max(torch.abs(x_fp32)))
+    # Scale tensor to [-1, 1] range. 
+    # TODO: Turns out the abs max is also optionally qunatized in bnb.
+    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/d8d157f4a7708967b63b56d312749fabd21445c2/bitsandbytes/functional.py#L1352C4-L1356C36
+    # compress_statistics = False, https://github.com/bitsandbytes-foundation/bitsandbytes/blob/d8d157f4a7708967b63b56d312749fabd21445c2/bitsandbytes/functional.py#L1185C9-L1185C102
+    x_fp32_scaled= x_fp32 / (absmax := torch.max(torch.abs(x_fp32)))
     
     # Find closest NF4 grid point index to repesent each value in the nf4 tensor, flatten.
     idx = torch.argmin(torch.abs((x_fp32_scaled.view(-1).unsqueeze(-1) - NF4_GRID)), dim=-1)
