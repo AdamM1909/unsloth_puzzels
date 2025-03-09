@@ -29,7 +29,7 @@ NF4_GRID = torch.tensor([
         ]
 )
 
-@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
+@torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
 def quantize_nf4_blockwise(x_fp32, blocksize=64):
     
     # Zero pad to a multiple of blocksize
@@ -37,7 +37,7 @@ def quantize_nf4_blockwise(x_fp32, blocksize=64):
     
     # Scale block-by-block.
     x_fp32_scaled = (x_fp32.view(-1, blocksize) / (absmax := torch.max(torch.abs(x_fp32.view(-1, blocksize)), dim=-1, keepdim=True)[0])).view(-1)
- 
+    
     # Find closest NF4 grid point index to repesent each value in the nf4 tensor.
     idx = torch.argmin(torch.abs((x_fp32_scaled.unsqueeze(-1) - NF4_GRID)), dim=-1)
 
@@ -72,8 +72,6 @@ if __name__ == "__main__":
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
     # https://huggingface.co/docs/bitsandbytes/en/reference/nn/linear4bit
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
-    # TODO: blockwize dequnatization, signature to match fast_dequantize
-    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/86b6c37a8ad448230cedb60753f63150b603a112/bitsandbytes/functional.py#L958
     
     # Here are the kernels in C: https://github.com/bitsandbytes-foundation/bitsandbytes/tree/main/csrc
     torch.random.manual_seed(0)
@@ -86,8 +84,9 @@ if __name__ == "__main__":
     
     # Dequantize back to FP32
     X_dequant_block = dequantize_nf4_blockwise(X_nf4_block, c_block, X.shape, blocksize)
-
     print(X_dequant_block)
+    print(X)
+    print(c_block)
     
 
 
@@ -116,8 +115,4 @@ if __name__ == "__main__":
     # # Dequantize back to FP32
     # X_dequant = dequantize_nf4(X_nf4, c, X.shape)
     
-    # # Print results
-    # print(X)
-    # print(c)
-    # print(X_nf4)
-    # print(X_dequant)
+
