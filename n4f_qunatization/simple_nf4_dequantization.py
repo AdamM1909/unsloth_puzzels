@@ -55,7 +55,7 @@ def dequantize_nf4_blockwise(x_nf4, absmax, x_shape, blocksize):
     
     # Make an empty tensor to unpack idxs of NF4_GRID back into. 
     idx = torch.empty(x_nf4.numel() * 2, dtype=torch.int64, device=x_nf4.device, requires_grad=False).view(-1, 2)
-    print(idx.shape)
+ 
     # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
     idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
     
@@ -67,23 +67,23 @@ def dequantize_nf4_blockwise(x_nf4, absmax, x_shape, blocksize):
     
     return x_fp32
 
-@torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
-def dequantize_nf4_blockwise_bnb(x_nf4, quant_state):
+@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options)
+def dequantize_nf4_blockwise_bnb(x_nf4: Params4bit.data, quant_state: QuantState):
 
     # Unpack the quantization state.
     absmax, x_shape, blocksize, dtype = quant_state.absmax, quant_state.shape, quant_state.blocksize, quant_state.dtype
-
-    # Make an empty tensor to unpack idxs of NF4_GRID back into. 
-    idx = torch.empty(x_nf4.numel() * 2, dtype=torch.int64, device=x_nf4.device, requires_grad=False).view(-1, 2)
-
-    # To match my convention.
-    idx = idx.unsqueeze(-1)
     
+    # # Make an empty tensor to unpack idxs of NF4_GRID back into. 
+    idx = torch.empty_like(x_nf4.expand(-1, 2), requires_grad=False)
+
+    # Get the shape coneventions alligned.
+    x_nf4 = x_nf4.squeeze(1)
+        
     # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
     idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
-    
+
     # Convert indices back to grid values.
-    x_fp32 = (NF4_GRID[idx].view(-1, blocksize) * absmax.unsqueeze(-1)).view(-1).to(dtype)
+    x_fp32 = (NF4_GRID[idx.to(int)].view(-1, blocksize) * absmax.unsqueeze(-1)).view(-1).to(dtype)
     
     # If we had to add padding remove it now and get back to original tensor shape.
     x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
@@ -96,6 +96,7 @@ if __name__ == "__main__":
     # https://huggingface.co/docs/bitsandbytes/en/reference/nn/linear4bit
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
     
+    # 
     # Here are the kernels in C: https://github.com/bitsandbytes-foundation/bitsandbytes/tree/main/csrc
     torch.random.manual_seed(0)
     N = 9
