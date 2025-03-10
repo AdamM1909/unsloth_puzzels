@@ -55,7 +55,7 @@ def dequantize_nf4_blockwise(x_nf4, absmax, x_shape, blocksize):
     
     # Make an empty tensor to unpack idxs of NF4_GRID back into. 
     idx = torch.empty(x_nf4.numel() * 2, dtype=torch.int64, device=x_nf4.device, requires_grad=False).view(-1, 2)
-    
+    print(idx.shape)
     # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
     idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
     
@@ -67,7 +67,7 @@ def dequantize_nf4_blockwise(x_nf4, absmax, x_shape, blocksize):
     
     return x_fp32
 
-@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
+@torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4_blockwise_bnb(x_nf4, quant_state):
 
     # Unpack the quantization state.
@@ -107,9 +107,9 @@ if __name__ == "__main__":
     
     # Dequantize back to FP32
     X_dequant_block = dequantize_nf4_blockwise(X_nf4_block, c_block, X.shape, blocksize)
-    print(X_dequant_block)
-    print(X)
-    print(c_block)
+    # print(X_dequant_block)
+    # print(X)
+    # print(c_block)
     
 
 
