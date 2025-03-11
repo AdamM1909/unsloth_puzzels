@@ -30,66 +30,63 @@ NF4_GRID = torch.tensor([
 )
 
 @torch.compile(fullgraph=False, dynamic=True, options=torch_compile_options, disable=disable)
-def quantize_nf4_blockwise(x_fp32, blocksize=64):
+def quantize_nf4_blockwise(w_fp32, blocksize=64, absmax_blocksize=256):
     
-    # Zero pad to a multiple of blocksize
-    x_fp32 = torch.cat([x_fp32.view(-1), torch.zeros((-x_fp32.numel() % blocksize))])
-    
-    # Scale block-by-block.
-    x_fp32_scaled = (x_fp32.view(-1, blocksize) / (absmax := torch.max(torch.abs(x_fp32.view(-1, blocksize)), dim=-1, keepdim=True)[0])).view(-1)
-    
-    # Find closest NF4 grid point index to repesent each value in the nf4 tensor.
-    idx = torch.argmin(torch.abs((x_fp32_scaled.unsqueeze(-1) - NF4_GRID)), dim=-1)
+    def _quantize(x_fp32, blocksize):
+        
+        # Zero pad to a multiple of blocksize
+        x_fp32 = torch.cat([x_fp32.view(-1), torch.zeros((-x_fp32.numel() % blocksize))])
 
-    # View in pairs ready to pack 2 uint4 into uint8.
-    idx = idx.view(-1, 2)
-    
-    # First value of pair goes in the lower 4 bits, second value in the upper 4 bits by shifting << 4 (*16).
-    # combining with bitwise OR. 
-    x_nf4 = (idx[:, 1] | (idx[:, 0] << 4)).to(torch.uint8)
+        # Scale block-by-block.
+        x_fp32_scaled = (x_fp32.view(-1, blocksize) / (absmax := torch.max(torch.abs(x_fp32.view(-1, blocksize)), dim=-1, keepdim=True)[0])).view(-1)
 
-    return x_nf4, absmax
+        # Find closest NF4 grid point index to repesent each value in the nf4 tensor.
+        idx = torch.argmin(torch.abs((x_fp32_scaled.unsqueeze(-1) - NF4_GRID)), dim=-1)
+
+        # View in pairs ready to pack 2 uint4 into uint8.
+        idx = idx.view(-1, 2)
+
+        # First value of pair goes in the lower 4 bits, second value in the upper 4 bits by shifting << 4 (*16).
+        # combining with bitwise OR. 
+        x_nf4 = (idx[:, 1] | (idx[:, 0] << 4)).to(torch.uint8)
+
+        return x_nf4, absmax
+    
+    # Qunatize the weights.
+    w_nf4, absmax_fp32 = _quantize(w_fp32, blocksize)
+    
+    # Qunatize the absmax used in the qunatization of the weights.
+    absmax_nf4, absmax_absmax_fp32 = _quantize(absmax_fp32, absmax_blocksize)
+    
+    return w_nf4, absmax_nf4, absmax_absmax_fp32
+    
 
 @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
-def dequantize_nf4_blockwise(x_nf4, absmax, x_shape, blocksize):
+def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, blocksize=64, absmax_blocksize=256):
     
-    # Make an empty tensor to unpack idxs of NF4_GRID back into. 
-    idx = torch.empty(x_nf4.numel() * 2, dtype=torch.int64, device=x_nf4.device, requires_grad=False).view(-1, 2)
- 
-    # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
-    idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
-    
-    # Convert indices back to grid values
-    x_fp32 = (NF4_GRID[idx].view(-1, blocksize) * absmax).view(-1)
-    
-    # If we had to add padding remove it now and get back to original tensor shape.
-    x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
-    
-    return x_fp32
-
-@torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options)
-def dequantize_nf4_blockwise_bnb(x_nf4: Params4bit.data, quant_state: QuantState):
-
-    # Unpack the quantization state.
-    absmax, x_shape, blocksize, dtype = quant_state.absmax, quant_state.shape, quant_state.blocksize, quant_state.dtype
-    
-    # # Make an empty tensor to unpack idxs of NF4_GRID back into. 
-    idx = torch.empty_like(x_nf4.expand(-1, 2), requires_grad=False)
-
-    # Get the shape coneventions alligned.
-    x_nf4 = x_nf4.squeeze(1)
+    def _dequantize(x_nf4, absmax, x_shape, blocksize):
         
-    # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
-    idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
-
-    # Convert indices back to grid values.
-    x_fp32 = (NF4_GRID[idx.to(int)].view(-1, blocksize) * absmax.unsqueeze(-1)).view(-1).to(dtype)
+        # Make an empty tensor to unpack idxs of NF4_GRID back into. 
+        idx = torch.empty_like(x_nf4.expand(-1, 2), requires_grad=False)
     
-    # If we had to add padding remove it now and get back to original tensor shape.
-    x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
+        # Unpack lower and upepr 4 bits by leverging an & with 00001111. 
+        idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
+        
+        # Convert indices back to grid values
+        x_fp32 = (NF4_GRID[idx].view(-1, blocksize) * absmax).view(-1)
+        
+        # If we had to add padding remove it now and get back to original tensor shape.
+        x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
+        
+        return x_fp32
     
-    return x_fp32
+    # Dequnatize the absmax. There is one absmax for each block in the qunatization.
+    absmax_fp32 = _dequantize(absmax_nf4, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize)
     
+    # Dequnatize the weights.
+    w_fp32 = _dequantize(w_nf4, absmax_fp32, w_shape, blocksize)
+    
+    return w_fp32
     
 if __name__ == "__main__":
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
@@ -99,15 +96,17 @@ if __name__ == "__main__":
     
     
     torch.random.manual_seed(0)
-    N = 9
-    X = torch.randn(N, N, dtype=torch.float32)
+    N = 3
+    W = torch.randn(N, N, dtype=torch.float32)
     
     # Quantize to NF4
-    blocksize = 64
-    X_nf4_block, c_block = quantize_nf4_blockwise(X, blocksize)
+    blocksize, absmax_blocksize = 64, 256
+    w_nf4, absmax_nf4, absmax_absmax_fp32 = quantize_nf4_blockwise(W, blocksize, absmax_blocksize)
     
     # Dequantize back to FP32
-    X_dequant_block = dequantize_nf4_blockwise(X_nf4_block, c_block, X.shape, blocksize)
-    # print(X_dequant_block)
-    # print(X)
-    # print(c_block)
+    W_deqaunt = dequantize_nf4_blockwise(w_nf4, W.shape, absmax_nf4, absmax_absmax_fp32, blocksize, absmax_blocksize)
+    
+    print(f"{W_deqaunt=}")
+    print(f"{absmax_nf4=}")
+    print(f"{W=}")
+
