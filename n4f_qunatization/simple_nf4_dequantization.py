@@ -87,6 +87,11 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, blo
     w_fp32 = _dequantize(w_nf4, absmax_fp32, w_shape, blocksize)
     
     return w_fp32
+
+def bnb_dequnatize(weight):
+    # Unpack Linear4bit quant state and make pad + reshape to work with our implementation.
+    weight.quant_state
+    return dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, blocksize, absmax_blocksize)
     
 if __name__ == "__main__":
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
