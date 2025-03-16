@@ -83,13 +83,10 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, abs
         
         return x_fp32
     
-    # print(f"{w_nf4.shape=}")
-    # print(f"{absmax_nf4.shape=}")
-    # print(f"{absmax_absmax_fp32.shape=}")
-    # print(f"{w_shape=}")
-    
     # Dequnatize the absmax. There is one absmax for each block in the qunatization.
     absmax_fp32 = _dequantize(absmax_nf4, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize)
+    
+    # Not forgetting to add the offset back.
     absmax_fp32  = absmax_fp32 + absmax_offset
     
     # Dequnatize the weights.
