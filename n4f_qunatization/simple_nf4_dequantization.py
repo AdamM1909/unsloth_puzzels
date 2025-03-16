@@ -109,9 +109,7 @@ if __name__ == "__main__":
     # There is a mistake with these N, M when comparing to Linear4bit
     # it comes from the qunatization of the absmax. I might not be using the correct method ...
     # bitsnbytes has absmax_nf4.shape=torch.Size([262144]) where i have absmax_nf4.shape=torch.Size([131072])
-    # "Quantization Defaults to signed 8-bit dynamic type.":
-    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/e772a9e8723cfc2036fecc830c328ad3b9705250/bitsandbytes/functional.py#L872
-    
+    # dynamic map type used as code not passed as "nf4" in bitsnbytes
     
     torch.random.manual_seed(0)
     N, M = 2048,  8192
