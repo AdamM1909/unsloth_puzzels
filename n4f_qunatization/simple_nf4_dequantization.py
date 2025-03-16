@@ -67,7 +67,7 @@ def quantize_nf4_blockwise(w_fp32, blocksize=64, absmax_blocksize=256):
 @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, absmax_offset, blocksize=64, absmax_blocksize=256, dtype=torch.float32):
     
-    def _dequantize(x_nf4, absmax, x_shape, blocksize, dtype):
+    def _dequantize(x_nf4, absmax, x_shape, blocksize):
         
         # Make an empty tensor to unpack idxs of NF4_GRID back into. 
         idx = torch.empty_like(x_nf4.unsqueeze(1).expand(-1, 2), requires_grad=False, dtype=torch.int64)
@@ -88,14 +88,14 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, abs
     print(f"{absmax_nf4.shape=}")
 
     
-    # Dequnatize the absmax to float32. There is one absmax for each block in the qunatization.
-    absmax_fp32 = _dequantize(absmax_nf4, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize, dtype=torch.float32)
+    # Dequnatize the absmax. There is one absmax for each block in the qunatization.
+    absmax_fp32 = _dequantize(absmax_nf4, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize)
     
     # Not forgetting to add the offset back.
     absmax_fp32  = absmax_fp32 + absmax_offset
     
     # Dequnatize the weights.
-    w_fp32 = _dequantize(w_nf4, absmax_fp32, w_shape, blocksize, dtype)
+    w_fp32 = _dequantize(w_nf4, absmax_fp32, w_shape, blocksize)
     
     return w_fp32
 
@@ -106,10 +106,16 @@ if __name__ == "__main__":
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
     # Here are the kernels in C: https://github.com/bitsandbytes-foundation/bitsandbytes/tree/main/csrc
     
+    # There is a mistake with these N, M when comparing to Linear4bit
+    # it comes from the qunatization of the absmax. I might not be using the correct method ...
+    # bitsnbytes has absmax_nf4.shape=torch.Size([262144]) where i have absmax_nf4.shape=torch.Size([131072])
+    # "Quantization Defaults to signed 8-bit dynamic type.":
+    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/e772a9e8723cfc2036fecc830c328ad3b9705250/bitsandbytes/functional.py#L872
+    
     
     torch.random.manual_seed(0)
     N, M = 2048,  8192
-    W = torch.randn(N, M, dtype=torch.float32)
+    W = torch.randn(N, , dtype=torch.float32)
     
     # Quantize to NF4
     blocksize, absmax_blocksize = 64, 256
