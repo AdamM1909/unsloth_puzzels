@@ -67,7 +67,7 @@ def quantize_nf4_blockwise(w_fp32, blocksize=64, absmax_blocksize=256):
 @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, absmax_offset, blocksize=64, absmax_blocksize=256, dtype=torch.float32):
     
-    def _dequantize(x_nf4, absmax, x_shape, blocksize):
+    def _dequantize(x_nf4, absmax, x_shape, blocksize, dtype):
         
         # Make an empty tensor to unpack idxs of NF4_GRID back into. 
         idx = torch.empty_like(x_nf4.unsqueeze(1).expand(-1, 2), requires_grad=False, dtype=torch.int64)
@@ -76,21 +76,26 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_nf4, absmax_absmax_fp32, abs
         idx[:, 0], idx[:, 1] = (x_nf4 >> 4) & 0x0F, x_nf4 & 0x0F
         
         # Convert indices back to grid values
-        x_fp32 = (NF4_GRID.to(dtype)[idx].view(-1, blocksize) * absmax).view(-1)
+        x_fp32 = (NF4_GRID[idx].view(-1, blocksize) * absmax).view(-1).to(dtype)
         
         # If we had to add padding remove it now and get back to original tensor shape.
         x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
         
         return x_fp32
     
-    # Dequnatize the absmax. There is one absmax for each block in the qunatization.
-    absmax_fp32 = _dequantize(absmax_nf4, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize)
+    print(f"{w_nf4.shape=}")
+    print(f"{w_shape=}")
+    print(f"{absmax_nf4.shape=}")
+
+    
+    # Dequnatize the absmax to float32. There is one absmax for each block in the qunatization.
+    absmax_fp32 = _dequantize(absmax_nf4, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize, dtype=torch.float32)
     
     # Not forgetting to add the offset back.
     absmax_fp32  = absmax_fp32 + absmax_offset
     
     # Dequnatize the weights.
-    w_fp32 = _dequantize(w_nf4, absmax_fp32, w_shape, blocksize)
+    w_fp32 = _dequantize(w_nf4, absmax_fp32, w_shape, blocksize, dtype)
     
     return w_fp32
 
@@ -103,12 +108,8 @@ if __name__ == "__main__":
     
     
     torch.random.manual_seed(0)
-    N = 3
-    W = torch.randn(N, N, dtype=torch.float32)
-    
-    W = torch.tensor([[ 0.1324, -0.1374,  0.1583],
-        [-0.0295,  0.2466,  0.1375],
-        [-0.0664, -0.4668,  0.1318]])
+    N, M = 2048,  8192
+    W = torch.randn(N, M, dtype=torch.float32)
     
     # Quantize to NF4
     blocksize, absmax_blocksize = 64, 256
