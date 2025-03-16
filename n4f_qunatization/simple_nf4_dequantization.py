@@ -111,10 +111,13 @@ if __name__ == "__main__":
     # bitsnbytes has absmax_nf4.shape=torch.Size([262144]) where i have absmax_nf4.shape=torch.Size([131072])
     # dynamic map type used as code not passed as "nf4" in bitsnbytes
     # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/e772a9e8723cfc2036fecc830c328ad3b9705250/bitsandbytes/functional.py#L1248C4-L1268C19
+    # They use quant_type="fp4" but this doesnt explain why they have twice as many ? 
+    
+    # 64,  128 works, 64*2, 128 does not ... same issue
     
     torch.random.manual_seed(0)
-    N, M = 2048,  8192
-    W = torch.randn(N, , dtype=torch.float32)
+    N, M = 64*2,  128
+    W = torch.randn(N, M, dtype=torch.float32)
     
     # Quantize to NF4
     blocksize, absmax_blocksize = 64, 256
