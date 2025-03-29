@@ -170,7 +170,7 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
     absmax_idx = absmax_unit8.to(torch.int64)
 
     # Dequnatize the absmax. There is one absmax for each block in the qunatization.
-    absmax_fp32 = _qunatization_index_to_dtype(absmax_idx, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize, UINT8_GRID)
+    absmax_fp32 = _qunatization_index_to_dtype(absmax_idx, absmax_absmax_fp32, torch.empty([w_nf4.numel()*2 // blocksize, 1]).shape, absmax_blocksize, UINT8_GRID)
     
     # Not forgetting to add the offset back.
     absmax_fp32  = absmax_fp32 + absmax_offset_fp32
