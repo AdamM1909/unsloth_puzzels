@@ -187,18 +187,20 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
     return w_dtype
 
 def dequnatize_bnb(weight):
+    # Wrapper to dequnatize a Params4bit from bitsandbytes.
     
-    # Dequnatize a Params4bit from bitsandbytes.
-    
+    # Unpack variables.
     w_nf4, quant_state = weight.weight, weight.quant_state
     absmax_unit8, w_shape, blocksize, dtype, _state2 = quant_state.absmax, quant_state.shape, quant_state.blocksize, quant_state.dtype, quant_state.state2
     absmax_blocksize, absmax_absmax_fp32, absmax_offset_fp32 = _state2.blocksize, _state2.absmax, quant_state.offset
-    # print(f"{absmax_unit8=}")
-    # This is the zero padding on the weights
+    
+    # This is the zero padding on the weights.
     w_nf4 = torch.cat([w_nf4.squeeze(-1), 119*torch.ones((-w_nf4.numel() % (blocksize//2)), dtype=torch.uint8, device=w_nf4.device)])
 
-    # This is the zero padding on the absmax
+    # This is the zero padding on the absmax.
     absmax_unit8 = torch.cat([absmax_unit8, 119*torch.ones((-absmax_unit8.numel() % (absmax_blocksize)), dtype=torch.uint8, device=absmax_unit8.device)])    
+    
+    # Reshape to allign with my functions.
     absmax_absmax_fp32 = absmax_absmax_fp32.unsqueeze(-1)
 
     return dequantize_nf4_blockwise(w_nf4=w_nf4, 
