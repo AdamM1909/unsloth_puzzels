@@ -152,7 +152,7 @@ def quantize_nf4_blockwise(w_fp32, blocksize=64, absmax_blocksize=256):
 @torch.compile(fullgraph=True, dynamic=True, options=torch_compile_options, disable=disable)
 def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, absmax_offset_fp32, blocksize=64, absmax_blocksize=256, dtype=torch.float32):
     
-    def _qunatization_index_to_float32(idx, absmax, x_shape, blocksize, qunatization_grid):
+    def _qunatization_index_to_dtype(idx, absmax, x_shape, blocksize, qunatization_grid):
 
         # Convert indices back to grid values
         x_fp32 = (qunatization_grid[idx].view(-1, blocksize) * absmax).view(-1).to(dtype)
@@ -170,7 +170,7 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
     absmax_idx = absmax_unit8.to(torch.int64)
 
     # Dequnatize the absmax. There is one absmax for each block in the qunatization.
-    absmax_fp32 = _qunatization_index_to_float32(absmax_idx, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize, UINT8_GRID)
+    absmax_fp32 = _qunatization_index_to_dtype(absmax_idx, absmax_absmax_fp32, torch.Size([w_nf4.numel()*2 // blocksize, 1]), absmax_blocksize, UINT8_GRID)
     
     # Not forgetting to add the offset back.
     absmax_fp32  = absmax_fp32 + absmax_offset_fp32
@@ -182,9 +182,9 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
     w_idx[:, 0], w_idx[:, 1] = (w_nf4 >> 4) & 0x0F, w_nf4 & 0x0F
     
     # Dequnatize the weights.
-    w_fp32 = _qunatization_index_to_float32(w_idx, absmax_fp32, w_shape, blocksize, NF4_GRID)
+    w_dtype= _qunatization_index_to_dtype(w_idx, absmax_fp32, w_shape, blocksize, NF4_GRID)
     
-    return w_fp32
+    return w_dtype
 
 def dequnatize_bnb(weight):
     
