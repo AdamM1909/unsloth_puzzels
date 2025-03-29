@@ -161,6 +161,10 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
         x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
         
         return x_fp32
+
+    print(f"{w_nf4.shape=}")
+    print(f"{w_shape=}")
+    print(f"{absmax_unit8.shape=}")
     
     # Cast to int allowing Torch indexing.
     absmax_idx = absmax_unit8.to(torch.int64)
@@ -186,24 +190,22 @@ def dequnatize_bnb(weight):
     
     # Dequnatize a Params4bit from bitsandbytes.
     
-    # Upack everything we need.
     w_nf4, quant_state = weight.weight, weight.quant_state
-    absmax_nf4, w_shape, blocksize, dtype, _state2 = quant_state.absmax, quant_state.shape, quant_state.blocksize, quant_state.dtype, quant_state.state2
-    absmax_blocksize, absmax_absmax_fp32, absmax_offset = _state2.blocksize, _state2.absmax, quant_state.offset
- 
-    # Add padding to match my convention.
-    # This is the zero padding on the weights.
+    absmax_unit8, w_shape, blocksize, dtype, _state2 = quant_state.absmax, quant_state.shape, quant_state.blocksize, quant_state.dtype, quant_state.state2
+    absmax_blocksize, absmax_absmax_fp32, absmax_offset_fp32 = _state2.blocksize, _state2.absmax, quant_state.offset
+    # print(f"{absmax_unit8=}")
+    # This is the zero padding on the weights
     w_nf4 = torch.cat([w_nf4.squeeze(-1), 119*torch.ones((-w_nf4.numel() % (blocksize//2)), dtype=torch.uint8, device=w_nf4.device)])
 
-    # This is the zero padding on the absmax.
-    absmax_nf4 = torch.cat([absmax_nf4, 119*torch.ones((-absmax_nf4.numel() % (absmax_blocksize//2)), dtype=torch.uint8, device=absmax_nf4.device)])    
+    # This is the zero padding on the absmax
+    absmax_unit8 = torch.cat([absmax_unit8, 119*torch.ones((-absmax_unit8.numel() % (absmax_blocksize)), dtype=torch.uint8, device=absmax_unit8.device)])    
     absmax_absmax_fp32 = absmax_absmax_fp32.unsqueeze(-1)
 
     return dequantize_nf4_blockwise(w_nf4=w_nf4, 
                                     w_shape=w_shape, 
-                                    absmax_nf4=absmax_nf4, 
+                                    absmax_unit8=absmax_unit8, 
                                     absmax_absmax_fp32=absmax_absmax_fp32, 
-                                    absmax_offset=absmax_offset,
+                                    absmax_offset_fp32=absmax_offset_fp32,
                                     blocksize=blocksize, 
                                     absmax_blocksize=absmax_blocksize,
                                     dtype=dtype)
@@ -225,7 +227,7 @@ if __name__ == "__main__":
     # 64,  128 works, 64*2, 128 does not ... same issue
     
     torch.random.manual_seed(0)
-    N, M = 64*2,  128
+    N, M = 64,  128*2
     W = torch.randn(N, M, dtype=torch.float32)
     
     # Quantize to NF4
