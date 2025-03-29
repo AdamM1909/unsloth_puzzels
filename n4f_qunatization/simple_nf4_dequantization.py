@@ -155,12 +155,12 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
     def _qunatization_index_to_dtype(idx, absmax, x_shape, blocksize, qunatization_grid):
 
         # Convert indices back to grid values
-        x_fp32 = (qunatization_grid[idx].view(-1, blocksize) * absmax).view(-1).to(dtype)
+        x_dtype = (qunatization_grid[idx].view(-1, blocksize) * absmax).view(-1).to(dtype)
         
         # If we had to add padding remove it now and get back to original tensor shape.
-        x_fp32 = x_fp32[:x_fp32.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
+        x_dtype = x_dtype[:x_dtype.numel() - (-x_shape.numel() % blocksize)].view(*x_shape)
         
-        return x_fp32
+        return x_dtype
 
     print(f"{w_nf4.shape=}")
     print(f"{w_shape=}")
@@ -182,7 +182,7 @@ def dequantize_nf4_blockwise(w_nf4, w_shape, absmax_unit8, absmax_absmax_fp32, a
     w_idx[:, 0], w_idx[:, 1] = (w_nf4 >> 4) & 0x0F, w_nf4 & 0x0F
     
     # Dequnatize the weights.
-    w_dtype= _qunatization_index_to_dtype(w_idx, absmax_fp32, w_shape, blocksize, NF4_GRID)
+    w_dtype = _qunatization_index_to_dtype(w_idx, absmax_fp32, w_shape, blocksize, NF4_GRID)
     
     return w_dtype
 
