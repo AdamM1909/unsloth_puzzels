@@ -214,20 +214,7 @@ def dequnatize_bnb(weight):
     
 
 if __name__ == "__main__":
-    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/b8223fed8aa3f6422f2426828f358f760e208a52/bitsandbytes/functional.py#L1076
-    # https://huggingface.co/docs/bitsandbytes/en/reference/nn/linear4bit
-    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py
-    # Here are the kernels in C: https://github.com/bitsandbytes-foundation/bitsandbytes/tree/main/csrc
-    
-    # There is a mistake with these N, M when comparing to Linear4bit
-    # it comes from the qunatization of the absmax. I might not be using the correct method ...
-    # bitsnbytes has absmax_nf4.shape=torch.Size([262144]) where i have absmax_nf4.shape=torch.Size([131072])
-    # dynamic map type used as code not passed as "nf4" in bitsnbytes
-    # https://github.com/bitsandbytes-foundation/bitsandbytes/blob/e772a9e8723cfc2036fecc830c328ad3b9705250/bitsandbytes/functional.py#L1248C4-L1268C19
-    # They use quant_type="fp4" but this doesnt explain why they have twice as many ? 
-    
-    # 64,  128 works, 64*2, 128 does not ... same issue
-    
+
     torch.random.manual_seed(0)
     N, M = 64,  128*2
     W = torch.randn(N, M, dtype=torch.float32)
@@ -238,9 +225,8 @@ if __name__ == "__main__":
     
     # Dequantize back to FP32
     W_deqaunt = dequantize_nf4_blockwise(w_nf4, W.shape, absmax_unit8, absmax_absmax_fp32, absmax_offset, blocksize, absmax_blocksize)
-    
     print(f"{W_deqaunt=}")
     print(f"{W=}")
 
-    print('okay')
+
 
